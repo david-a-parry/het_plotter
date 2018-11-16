@@ -174,12 +174,15 @@ def add_highlights(plt, contig, centromeres, roi, pivot=None,
             add_highlight_to_plot(plt, region, color=col, pivot_table=pivot,
                                   label_heatmaps=label_heatmaps)
 
-def plot_zygosity(counter, contig, out_dir, logger, window_length=1e5,
+def plot_zygosity(counter, contig, out_dir, logger, df=None, window_length=1e5,
                   plot_per_sample=True, plot_together=True, centromeres=dict(),
                   roi=dict()):
-    logger.info("Converting counts for chromosome {} to ".format(contig) +
-                "dataframe")
-    frac_df = counts_to_df(counter, window_length)
+    if df is not None:
+        frac_df = df
+    else:
+        logger.info("Converting counts for chromosome {} to ".format(contig) +
+                    "dataframe")
+        frac_df = counts_to_df(counter, window_length)
     if plot_per_sample:
         for s in counter.samples:
             grid = plt.GridSpec(2, 2, wspace=0.1, hspace=0.2)
@@ -280,7 +283,7 @@ def plot_zygosity(counter, contig, out_dir, logger, window_length=1e5,
 def get_gt_counts(vcf, samples, contig, out_dir=None, coordinate_table=None,
                   parents=None, children=set(), prog_interval=10000,
                   window_length=1e5, roi=dict(), centromeres=dict(),
-                  logger=None, loglevel=logging.INFO, plot=True):
+                  logger=None, loglevel=logging.INFO, plot=True, csv=None):
     vreader = VcfReader(vcf)
     if logger is None:
         logger = mp.get_logger()
@@ -318,8 +321,15 @@ def get_gt_counts(vcf, samples, contig, out_dir=None, coordinate_table=None,
         gt_counter.count_genotype(pos=record.POS, samples=called_samps,
                                   gts=samp_gts)
     logger.info("Finished processing variants for contig {}".format(contig))
+    frac_df = None
+    if csv is not None:
+        chrom_csv = csv + '_{}.csv.gz'.format(contig)
+        logger.info("Converting counts for chromosome {} to ".format(contig) +
+                    "dataframe and writing to {}".format(chrom_csv))
+        frac_df = counts_to_df(gt_counter, window_length)
+        frac_df.to_csv(chrom_csv, compression='gzip', index=False)
     if plot:
-        plot_zygosity(gt_counter, contig, out_dir, logger,
+        plot_zygosity(gt_counter, contig, out_dir, logger, df=frac_df,
                       window_length=window_length, centromeres=centromeres,
                       roi=roi)
     else:
@@ -351,7 +361,7 @@ def read_centromere_bed(bedfile):
 
 def main(vcf, samples=[], chromosomes=[], output_directory='zygosity_plots',
          build=None, roi=None, progress_interval=10000, threads=1,
-         window_size=1e5, force=False):
+         window_size=1e5, force=False, csv=None):
     vreader = VcfReader(vcf)
     logger = get_logger()
     centromeres = dict()
@@ -378,7 +388,7 @@ def main(vcf, samples=[], chromosomes=[], output_directory='zygosity_plots',
     kwargs = {'vcf': vcf, 'prog_interval': progress_interval,
               'out_dir': output_directory, 'samples': samples,
               'window_length': window_size, 'roi': highlight_regions,
-              'centromeres': centromeres, 'plot': True}
+              'centromeres': centromeres, 'plot': True, 'csv': csv}
     contig_args = ({'contig': x} for x in chromosomes)
     if not contig_args:
         raise RuntimeError("No valid contigs identified in {}".format(fai))
@@ -439,6 +449,9 @@ def get_parser():
     parser.add_argument("-o", "--output_directory", default='zygosity_plots',
                         help='''Directory to place plot PNG files.
                                 Default='zygosity_plots'.''')
+    parser.add_argument("--csv", metavar='PREFIX',  help='''Write CSVs (one per
+                        chrom) with this prefix. CSVs will be named
+                        "<PREFIX><CHROM>.csv.gz"''')
     parser.add_argument("-w", "--window_size", type=float, default=1e5,
                         help='''Windows size to use when calculating ratios of
                         heterozygous vs homozygous genotypes. Default=1e5.''')
