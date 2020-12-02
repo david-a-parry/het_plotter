@@ -52,7 +52,6 @@ def get_gt_counts(vcf, samples, contig, logger, prog_interval=10000,
                   window_length=1e5):
     var_file = pysam.VariantFile(vcf)
     vreader = var_file.fetch(contig=contig)
-    logger.info("Reading chromosome {}".format(contig))
     gt_counter = PosCounter(samples)
     n = 0
     valid = 0
@@ -78,7 +77,7 @@ def get_gt_counts(vcf, samples, contig, logger, prog_interval=10000,
                 continue
             called_samps.append(s)
             samp_gts.append(record.samples[s]['GT'])
-        gt_counter.count_genotype(pos=record.POS, samples=called_samps,
+        gt_counter.count_genotype(pos=record.pos, samples=called_samps,
                                   gts=samp_gts)
     return gt_counter
 
