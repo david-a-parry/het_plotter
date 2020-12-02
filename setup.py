@@ -22,7 +22,7 @@ setup(
     url='https://git.ecdf.ed.ac.uk/dparry/het_plotter',
     license='MIT',
     install_requires=['pysam', 'numpy', 'pandas', 'seaborn'],
-    scripts=["bin/het_plotter"],
+    scripts=["bin/plot_heterozygosity"],
     include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
