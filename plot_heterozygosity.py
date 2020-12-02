@@ -28,6 +28,7 @@ import seaborn as sns
 chrom_re = re.compile(r'''^(chr)?[1-9][0-9]?$''')
 gt_ids = ['het', 'hom_alt', 'hom_ref',]
 gt_tups = [(0, 1), (1, 1), (0, 0)]
+
 class PosCounter(object):
     ''' Count number of hets/homs per contig for a sample.'''
 
@@ -241,7 +242,8 @@ def plot_zygosity(counter, contig, out_dir, logger, df=None, window_length=1e5,
         fig = plt.figure(figsize=(18,8))
         suptitle = fig.suptitle("{}".format(contig))
         plt.subplot(2, 1, 1)
-        ax = sns.heatmap(frac_df.pivot("sample_id", "pos", "calls"),
+        ax = sns.heatmap(frac_df.pivot("sample_id", "pos",
+                                       "calls").reindex(counter.samples),
                          cmap="viridis")
         ax.yaxis.set_label("")
         ax.xaxis.set_ticklabels([])
@@ -251,7 +253,8 @@ def plot_zygosity(counter, contig, out_dir, logger, df=None, window_length=1e5,
         ax.set_title("Calls per Window")
         plt.yticks(rotation=0)
         plt.subplot(2, 1, 2)
-        het_pivot = frac_df.pivot("sample_id", "pos", "het")
+        het_pivot = frac_df.pivot("sample_id", "pos",
+                                  "het").reindex(counter.samples)
         ax = sns.heatmap(het_pivot)#, cmap="plasma")
         add_highlights(ax, contig, centromeres, roi, pivot=het_pivot,
                        label_heatmaps=True)
