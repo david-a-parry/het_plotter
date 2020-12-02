@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pysam
 from collections import defaultdict
 
 gt_ids = ['het', 'hom_alt', 'hom_ref']
@@ -29,6 +30,57 @@ def counts_to_df(counter, window_length):
                 np.sum(np.sum(c, axis=0), axis=0)[counter.samp_indices[s]])
         i = window[-1][-1] + 1
     return pd.DataFrame(fract_dict)
+
+
+def gt_passes_filters(record, s, min_gq=20, min_dp=10, min_ab=0.25):
+    if record.samples[s]['GQ'] is None or record.samples[s]['GQ'] < min_gq:
+        return False
+    if record.samples[s]['DP'] is None or record.samples[s]['DP'] < min_dp:
+        return False
+    if record.samples[s]['GT'] == (0, 1):
+        # filter hets on AB
+        dp = sum(record.samples[s]['AD'])
+        ad = record.samples[s]['AD'][1]
+        if ad is not None and dp > 0:
+            ab = ad/dp
+            if ab < min_ab:
+                return False
+    return True
+
+
+def get_gt_counts(vcf, samples, contig, logger, prog_interval=10000,
+                  window_length=1e5):
+    var_file = pysam.VariantFile(vcf)
+    vreader = var_file.fetch(contig=contig)
+    logger.info("Reading chromosome {}".format(contig))
+    gt_counter = PosCounter(samples)
+    n = 0
+    valid = 0
+    for record in vreader:
+        if n % prog_interval == 0 and n != 0:
+            logger.info("Read {:,} records, processed {:,},".format(n, valid) +
+                        " {:,} filtered at {}:{}".format(n - valid,
+                                                         record.chrom,
+                                                         record.pos))
+        n += 1
+        if len(record.alleles) != 2:  # biallelic only
+            continue
+        if len(record.ref) != 1 or len(record.alts[0]) != 1:  # SNVs only
+            continue
+        if list(record.filter) != ['PASS']:
+            continue
+        valid += 1
+        called_samps = []
+        samp_gts = []
+        for s in samples:
+            #  filter on GQ/DP
+            if not gt_passes_filters(record, s):
+                continue
+            called_samps.append(s)
+            samp_gts.append(record.samples[s]['GT'])
+        gt_counter.count_genotype(pos=record.POS, samples=called_samps,
+                                  gts=samp_gts)
+    return gt_counter
 
 
 class PosCounter(object):

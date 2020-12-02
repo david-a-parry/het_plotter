@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from collections import defaultdict
-from het_plotter.het_counter import PosCounter, counts_to_df
+from het_plotter.het_counter import PosCounter, counts_to_df, get_gt_counts
 from het_plotter.plot import plot_zygosity
 from itertools import repeat
 import argparse
@@ -32,7 +32,7 @@ def initialize_mp_logger(logger, loglevel, logfile=None):
 def _process_runner(tup):
     kwargs1, kwargs2 = tup
     kwargs2.update(kwargs1)
-    return get_gt_counts(**kwargs2)
+    return count_genotypes(**kwargs2)
 
 
 def get_logger(loglevel=logging.INFO, logfile=None):
@@ -52,45 +52,18 @@ def get_logger(loglevel=logging.INFO, logfile=None):
     return logger
 
 
-def get_gt_counts(vcf, samples, contig, out_dir=None, coordinate_table=None,
-                  parents=None, children=set(), prog_interval=10000,
-                  window_length=1e5, roi=dict(), centromeres=dict(),
-                  logger=None, loglevel=logging.INFO, plot=True, csv=None):
-    var_file = pysam.VariantFile(vcf)
+def count_genotypes(vcf, samples, contig, out_dir=None, coordinate_table=None,
+                    parents=None, children=set(), prog_interval=10000,
+                    window_length=1e5, roi=dict(), centromeres=dict(),
+                    logger=None, loglevel=logging.INFO, plot=True, csv=None):
     if logger is None:
         logger = mp.get_logger()
         if logger.level == logging.NOTSET:
             initialize_mp_logger(logger, loglevel)
-    vreader = var_file.fetch(contig=contig)
     logger.info("Reading chromosome {}".format(contig))
-    gt_fields = ['GT', 'GQ', 'DP', 'AD']
-    gt_counter = PosCounter(samples)
-    n = 0
-    valid = 0
-    for record in vreader:
-        if n % prog_interval == 0 and n != 0:
-            logger.info("Read {:,} records, processed {:,},".format(n, valid) +
-                        " {:,} filtered at {}:{}".format(n - valid,
-                                                         record.chrom,
-                                                         record.pos))
-        n += 1
-        if len(record.alleles) != 2:  # biallelic only
-            continue
-        if len(record.ref) != 1 or len(record.alts[0]) != 1:  # SNVs only
-            continue
-        if list(record.filter) != ['PASS']:
-            continue
-        valid += 1
-        called_samps = []
-        samp_gts = []
-        for s in samples:
-            #  filter on GQ/DP
-            if not gt_passes_filters(record, s):
-                continue
-            called_samps.append(s)
-            samp_gts.append(record.samples[s]['GT'])
-        gt_counter.count_genotype(pos=record.POS, samples=called_samps,
-                                  gts=samp_gts)
+    gt_counter = get_gt_counts(vcf, samples, contig, logger,
+                               prog_interval=prog_interval,
+                               window_length=window_length)
     logger.info("Finished processing variants for contig {}".format(contig))
     frac_df = None
     if csv is not None:
@@ -173,7 +146,7 @@ def main(vcf, samples=[], chromosomes=[], output_directory='zygosity_plots',
     else:
         for c in contig_args:
             kwargs.update(c)
-            get_gt_counts(**kwargs)
+            count_genotypes(**kwargs)
     logger.info("Finished.")
 
 
@@ -192,22 +165,6 @@ def get_seq_ids(vcf):
     else:
         tbx = pysam.TabixFile(vcf)
         return (c for c in tbx.contigs if chrom_re.match(c))
-
-
-def gt_passes_filters(record, s, min_gq=20, min_dp=10, min_ab=0.25):
-    if record.samples[s]['GQ'] is None or record.samples[s]['GQ'] < min_gq:
-        return False
-    if record.samples[s]['DP'] is None or record.samples[s]['DP'] < min_dp:
-        return False
-    if record.samples[s]['GT'] == (0, 1):
-        # filter hets on AB
-        dp = sum(record.samples[s]['AD'])
-        ad = record.samples[s]['AD'][1]
-        if ad is not None and dp > 0:
-            ab = ad/dp
-            if ab < min_ab:
-                return False
-    return True
 
 
 def get_parser():
