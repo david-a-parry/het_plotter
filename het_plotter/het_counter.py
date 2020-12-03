@@ -47,6 +47,8 @@ def gt_passes_filters(record, s, min_gq=20, min_dp=10, min_ab=0.25):
         return False
     if record.samples[s]['DP'] is None or record.samples[s]['DP'] < min_dp:
         return False
+    if None in record.samples[s]['GT']:
+        return False
     if record.samples[s]['GT'] == (0, 1):
         # filter hets on AB
         dp = sum(record.samples[s]['AD'])
@@ -111,6 +113,8 @@ class PosCounter(object):
         self.gt_indices = dict((r, n) for n, r in enumerate(gt_ids))
         self.gt_indices.update(dict((r, n) for n, r in enumerate(gt_tups)))
         self.gt_indices[(1, 0)] = 0  # in case genotypes are phased
+        self.gt_indices[(1,)] = 1  # in case genotypes are hemizygous
+        self.gt_indices[(0,)] = 2  # in case genotypes are ref hemizygous
         self.counts = []
         self.pos = []
         self.samples = samples
