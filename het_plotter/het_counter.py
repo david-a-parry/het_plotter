@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pandas as pd
 import pysam
@@ -5,6 +6,15 @@ from collections import defaultdict
 
 gt_ids = ['het', 'hom_alt', 'hom_ref']
 gt_tups = [(0, 1), (1, 1), (0, 0)]
+
+module_logger = logging.getLogger(__name__)
+module_logger.setLevel(logging.INFO)
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+formatter = logging.Formatter(
+       '[%(asctime)s] %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+module_logger.addHandler(ch)
 
 
 def counts_to_df(counter, window_length):
@@ -48,13 +58,15 @@ def gt_passes_filters(record, s, min_gq=20, min_dp=10, min_ab=0.25):
     return True
 
 
-def get_gt_counts(vcf, samples, contig, logger, prog_interval=10000,
+def get_gt_counts(vcf, samples, contig, logger=None, prog_interval=10000,
                   window_length=1e5):
     var_file = pysam.VariantFile(vcf)
     vreader = var_file.fetch(contig=contig)
     gt_counter = PosCounter(samples)
     n = 0
     valid = 0
+    if logger is None:
+        logger = module_logger
     for record in vreader:
         if n % prog_interval == 0 and n != 0:
             logger.info("Read {:,} records, processed {:,},".format(n, valid) +
